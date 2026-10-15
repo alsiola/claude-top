@@ -1,0 +1,62 @@
+[
+  {
+    "expected": "attention",
+    "message": "**Test question:** Do you want me to commit this project to git now, or wait until you finish testing? Please answer \"commit\" or \"wait\"."
+  },
+  {
+    "expected": "attention",
+    "message": "I can deploy this to eu-west-1 or us-east-1. Which region do you want?"
+  },
+  {
+    "expected": "attention",
+    "message": "The migration drops the legacy_sessions table on staging. I need your approval before I run it."
+  },
+  {
+    "expected": "attention",
+    "message": "The build fails because the NPM_TOKEN secret is missing from the repository settings. I cannot continue until you add it."
+  },
+  {
+    "expected": "attention",
+    "message": "The Jira MCP server returns 401, so I cannot read the ticket. Run /mcp to sign in again, and I will continue."
+  },
+  {
+    "expected": "review",
+    "message": "I fixed the null check in parser.ts and added two tests for empty headers. All 142 tests pass. The change is ready for you to review."
+  },
+  {
+    "expected": "review",
+    "message": "PR #4512 is open: https://github.com/org/repo/pull/4512. It adds rate limiting to the login endpoint, with tests. CI is green."
+  },
+  {
+    "expected": "review",
+    "message": "I rebuilt the app. To use the new build, quit Claude Top and open dist/Claude Top.app again. The settings window now has its content."
+  },
+  {
+    "expected": "review",
+    "message": "Done. I moved the cache code into its own module and updated all 6 call sites. The build and the tests pass."
+  },
+  {
+    "expected": "idle",
+    "message": "I agree with both points. I sent the TD-3520 agent back to rework backend#3664:\n\n  1. Redis, not memory: the policy goes in Redis, with the user pool id as the key and the Redis pattern that the services already use. The agent first checks that tenant-service and user-service use the same Redis, so that one invalidation clears the value for both services. If they do not, the agent tells me before it builds anything.\n  2. Invalidation: the agent finds every path that changes a password policy. On each path in our services, it deletes the key after a successful update. Changes made outside our code, for example with Terraform or in the console, still depend on a TTL. The PR will say which paths are invalidated and which depend on the TTL.\n  3. Safety:\n     - If Redis is down, the read goes to Cognito.\n     - The cache never keeps an error.\n     - When the key is empty, there is still at most one Cognito call for each pool, so a burst cannot use up the quota again.\n  4. Proof on helios:\n     - many requests give 1 DescribeUserPool call in total across both services,\n     - a policy change through the real update path gives a new call at once,\n     - the policy then goes back to its old value.\n\n  frontend#4456 does not change. The Jira ticket stays at Ready for Merge, and \"Check JIRA status\" will run again after the push. I will tell you when the agent reports, or at once if it finds a blocker."
+  },
+  {
+    "expected": "idle",
+    "message": "The function reads the token header, then checks the signature with the public key from the JWKS endpoint. It returns nil when the token is expired."
+  },
+  {
+    "expected": "idle",
+    "message": "I started the full test suite in the background. It takes about 10 minutes. I will tell you when it finishes."
+  },
+  {
+    "expected": "idle",
+    "message": "Status: 3 of 5 agents finished. The other two still run. I will report when they are done."
+  },
+  {
+    "expected": "idle",
+    "message": "That is the correct behavior. When you sent \"commit\", the session went to working. My reply ended with a question, so the classifier set red. This reply asks nothing."
+  },
+  {
+    "expected": "idle",
+    "message": "Yes. The Stop hook runs when Claude finishes a turn. SubagentStop runs when a subagent finishes. Nothing in the config needs to change."
+  }
+]
