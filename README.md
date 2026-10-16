@@ -5,6 +5,7 @@ Claude Top is a small macOS app that shows the status of your Claude Code sessio
 | Light | Meaning |
 |---|---|
 | Red | A session is blocked on you. It asks a question, asks for permission, or cannot continue. |
+| Flashing red | A session stopped because of an API error. For example, the response stopped, your login expired, or you have no credits. |
 | Amber | A session finished its work. The work is ready for your review. |
 | Green | No session needs you. |
 
@@ -124,7 +125,7 @@ Some events have more fields:
 | `session.ended` | A session ends, its process stops, or you remove it. | `session` |
 | `test` | You click **Send Test**. | None |
 
-The `session` object has `id`, `project`, `cwd`, `state` (`working`, `idle`, `review`, or `attention`), `color` (`red`, `amber`, or `green`), and `reason`.
+The `session` object has `id`, `project`, `cwd`, `state` (`working`, `idle`, `review`, `attention`, or `failed`), `color` (`red`, `amber`, or `green`), and `reason`.
 
 Example:
 

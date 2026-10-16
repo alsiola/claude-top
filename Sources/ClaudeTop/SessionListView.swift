@@ -116,7 +116,7 @@ struct SessionRow: View {
     @State private var hovering = false
 
     private var needsYou: Bool {
-        !session.discovered && (session.state == .attention || session.state == .review)
+        !session.discovered && session.state.needsYou
     }
 
     private var dotColor: Color {
@@ -140,7 +140,7 @@ struct SessionRow: View {
                 Text(detail)
                     .font(.system(size: 12.5, weight: needsYou ? .medium : .regular))
                     .foregroundStyle(needsYou ? Palette.textColor(for: session.state) : Color.secondary)
-                    .lineLimit(1)
+                    .lineLimit(session.state == .failed ? 2 : 1)
                 if !location.isEmpty {
                     Text(location)
                         .font(.system(size: 11.5))
@@ -196,12 +196,16 @@ struct SessionRow: View {
 
     private var detail: String {
         if session.classifying { return "Checking…" }
-        if let reason = session.reason { return reason }
-        switch session.state {
+        return session.reason ?? Self.defaultDetail(session.state)
+    }
+
+    static func defaultDetail(_ state: SessionState) -> String {
+        switch state {
         case .working: return "Working"
         case .idle: return "Idle"
         case .review: return "Ready for review"
         case .attention: return "Needs you"
+        case .failed: return "Something went wrong"
         }
     }
 

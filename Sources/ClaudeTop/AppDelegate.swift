@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var subscriptions: Set<AnyCancellable> = []
     private var tabRefreshTimer: Timer?
+    private var statusFlashTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let bundleID = Bundle.main.bundleIdentifier,
@@ -45,8 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if settings.showPanel { panel.show() }
 
-        model.$light
-            .sink { [weak self] light in self?.updateStatusIcon(light) }
+        model.$light.combineLatest(model.$failing)
+            .sink { [weak self] light, failing in self?.updateStatusItem(light, failing: failing) }
             .store(in: &subscriptions)
 
         model.refreshHookStatus()
@@ -109,8 +110,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func updateStatusIcon(_ light: Light) {
-        let color = Palette.nsColor(for: light)
+    private func updateStatusItem(_ light: Light, failing: Bool) {
+        statusFlashTimer?.invalidate()
+        statusFlashTimer = nil
+        updateStatusIcon(light)
+        guard failing else { return }
+        statusFlashTimer = Timer.scheduledTimer(withTimeInterval: Flash.interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateStatusIcon(light, lit: Flash.isLit(at: Date()))
+            }
+        }
+    }
+
+    private func updateStatusIcon(_ light: Light, lit: Bool = true) {
+        let color = lit ? Palette.nsColor(for: light) : Palette.nsColor(for: light).withAlphaComponent(0.2)
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
             let dot = NSBezierPath(ovalIn: rect.insetBy(dx: 4, dy: 4))
             color.setFill()

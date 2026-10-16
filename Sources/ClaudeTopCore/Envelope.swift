@@ -42,6 +42,9 @@ public struct HookPayload: Decodable, Equatable, Sendable {
     public var source: String?
     public var agentID: String?
     public var backgroundTaskCount: Int?
+    /// `StopFailure` only: the API error type, such as `billing_error` or `server_error`.
+    public var error: String?
+    public var errorDetails: String?
 
     public init(
         sessionID: String?,
@@ -53,7 +56,9 @@ public struct HookPayload: Decodable, Equatable, Sendable {
         lastAssistantMessage: String? = nil,
         source: String? = nil,
         agentID: String? = nil,
-        backgroundTaskCount: Int? = nil
+        backgroundTaskCount: Int? = nil,
+        error: String? = nil,
+        errorDetails: String? = nil
     ) {
         self.sessionID = sessionID
         self.hookEventName = hookEventName
@@ -65,6 +70,8 @@ public struct HookPayload: Decodable, Equatable, Sendable {
         self.source = source
         self.agentID = agentID
         self.backgroundTaskCount = backgroundTaskCount
+        self.error = error
+        self.errorDetails = errorDetails
     }
 
     enum CodingKeys: String, CodingKey {
@@ -78,6 +85,8 @@ public struct HookPayload: Decodable, Equatable, Sendable {
         case source
         case agentID = "agent_id"
         case backgroundTasks = "background_tasks"
+        case error
+        case errorDetails = "error_details"
     }
 
     // Each field is decoded on its own, so that one field with an unexpected type
@@ -96,6 +105,8 @@ public struct HookPayload: Decodable, Equatable, Sendable {
         lastAssistantMessage = string(.lastAssistantMessage)
         source = string(.source)
         agentID = string(.agentID)
+        error = string(.error)
+        errorDetails = string(.errorDetails)
         if let tasks = try? container.decodeIfPresent([AnyDecodable].self, forKey: .backgroundTasks) {
             backgroundTaskCount = tasks.count
         } else if let count = try? container.decodeIfPresent(Int.self, forKey: .backgroundTasks) {

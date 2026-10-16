@@ -10,7 +10,8 @@ private func event(
     message: String? = nil,
     agent: String? = nil,
     source: String? = nil,
-    pid: Int32? = nil
+    pid: Int32? = nil,
+    error: String? = nil
 ) -> Envelope {
     Envelope(
         tsMs: ts,
@@ -22,7 +23,8 @@ private func event(
             toolName: tool,
             lastAssistantMessage: message,
             source: source,
-            agentID: agent
+            agentID: agent,
+            error: error
         ),
         context: pid.map { HookContext(claudePID: $0) }
     )
@@ -156,10 +158,59 @@ private func event(
         #expect(store.sessions["s1"]?.state == .attention)
     }
 
-    @Test func stopFailureIsRed() {
+    @Test func stopFailureIsFailedAndFlashesRed() {
         var store = SessionStore()
-        store.apply(event("StopFailure", at: 1))
-        #expect(store.sessions["s1"]?.state == .attention)
+        store.apply(event("UserPromptSubmit", at: 1))
+        store.apply(event(
+            "StopFailure", at: 2,
+            message: "API Error: The response stopped arriving. The response above may be incomplete.",
+            error: "server_error"
+        ))
+        #expect(store.sessions["s1"]?.state == .failed)
+        #expect(store.sessions["s1"]?.reason == "API Error: The response stopped arriving. The response above may be incomplete.")
+        #expect(store.light == .red)
+        #expect(store.isFailing)
+
+        store.apply(event("UserPromptSubmit", at: 3))
+        #expect(store.sessions["s1"]?.state == .working)
+        #expect(!store.isFailing)
+    }
+
+    @Test func stopFailureWithoutMessageUsesErrorType() {
+        var store = SessionStore()
+        store.apply(event("StopFailure", at: 1, error: "billing_error"))
+        #expect(store.sessions["s1"]?.reason == "Billing problem: no credits")
+        store.apply(event("StopFailure", at: 2, session: "s2"))
+        #expect(store.sessions["s2"]?.reason == "Turn failed with an error")
+    }
+
+    @Test(arguments: [
+        "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)",
+        "Not logged in · Please run /login",
+        "Login expired · Please run /login",
+        "You've hit your monthly spend limit. /model to switch models.",
+        "Credit balance is too low",
+    ])
+    func stopWithAPIErrorMessageIsFailedWithoutClassifier(message: String) {
+        var store = SessionStore()
+        let request = store.apply(event("Stop", at: 1, message: message))
+        #expect(request == nil)
+        #expect(store.sessions["s1"]?.state == .failed)
+        #expect(store.sessions["s1"]?.reason == message)
+    }
+
+    @Test func stopThatMentionsAnAPIErrorIsClassified() {
+        var store = SessionStore()
+        let request = store.apply(event("Stop", at: 1, message: "I fixed the handler for \"API Error: timeout\"."))
+        #expect(request != nil)
+    }
+
+    @Test func dismissClearsFailed() {
+        var store = SessionStore()
+        store.apply(event("StopFailure", at: 1, error: "rate_limit"))
+        store.dismiss("s1")
+        #expect(store.sessions["s1"]?.state == .idle)
+        #expect(!store.isFailing)
     }
 
     @Test func compactStartKeepsState() {
@@ -198,6 +249,9 @@ private func event(
         let stop = try #require(stopResult)
         store.applyClassification(stop, Classification(state: .review, reason: "Ready for review"))
         #expect(store.sorted.map(\.id) == ["red-old", "red-new", "amber", "working"])
+
+        store.apply(event("StopFailure", at: 60, session: "failed"))
+        #expect(store.sorted.first?.id == "failed")
     }
 
     @Test func dismissClearsToIdle() {
