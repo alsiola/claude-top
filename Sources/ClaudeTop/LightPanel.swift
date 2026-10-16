@@ -9,7 +9,7 @@ enum Palette {
 
     static func color(for state: SessionState) -> Color {
         switch state {
-        case .attention: return red
+        case .failed, .attention: return red
         case .review: return amber
         case .working, .idle: return green
         }
@@ -35,12 +35,30 @@ enum Palette {
     }
 }
 
+enum Flash {
+    static let interval: TimeInterval = 0.5
+
+    static func isLit(at date: Date) -> Bool {
+        Int(date.timeIntervalSinceReferenceDate / interval) % 2 == 0
+    }
+}
+
 struct TrafficLightView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
+        if model.failing {
+            TimelineView(.periodic(from: .now, by: Flash.interval)) { context in
+                lamps(redOn: Flash.isLit(at: context.date))
+            }
+        } else {
+            lamps(redOn: model.light == .red)
+        }
+    }
+
+    private func lamps(redOn: Bool) -> some View {
         VStack(spacing: 6) {
-            Lamp(color: Palette.red, isOn: model.light == .red, badge: model.redCount)
+            Lamp(color: Palette.red, isOn: redOn, badge: model.redCount)
             Lamp(color: Palette.amber, isOn: model.light == .amber, badge: model.amberCount)
             Lamp(color: Palette.green, isOn: model.light == .green, badge: 0)
         }
@@ -52,6 +70,7 @@ struct TrafficLightView: View {
         )
         .padding(8)
         .animation(.easeInOut(duration: 0.2), value: model.light)
+        .animation(.easeInOut(duration: 0.15), value: redOn)
     }
 }
 

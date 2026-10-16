@@ -1,23 +1,27 @@
 import Foundation
 
 public enum SessionState: String, Codable, Sendable {
-    case working, idle, review, attention
+    /// `failed`: the turn ended with an API error, for example no credits or a broken stream.
+    case working, idle, review, attention, failed
 
     var rank: Int {
         switch self {
-        case .attention: return 0
-        case .review: return 1
-        case .working, .idle: return 2
+        case .failed: return 0
+        case .attention: return 1
+        case .review: return 2
+        case .working, .idle: return 3
         }
     }
 
     public var light: Light {
         switch self {
-        case .attention: return .red
+        case .failed, .attention: return .red
         case .review: return .amber
         case .working, .idle: return .green
         }
     }
+
+    public var needsYou: Bool { light != .green }
 }
 
 public enum Light: String, Codable, Sendable {
@@ -143,9 +147,16 @@ public struct SessionStore: Sendable {
                 break
             }
         case "StopFailure":
-            set(&session, .attention, "Turn failed with an error", at: envelope.tsMs)
+            let reason = APIFailure.reason(
+                error: payload.error,
+                details: payload.errorDetails,
+                message: payload.lastAssistantMessage
+            )
+            set(&session, .failed, reason, at: envelope.tsMs)
         case "Stop":
-            if isMainAgent {
+            if isMainAgent, let message = payload.lastAssistantMessage, APIFailure.isErrorMessage(message) {
+                set(&session, .failed, APIFailure.firstLine(message), at: envelope.tsMs)
+            } else if isMainAgent {
                 session.pendingStopMs = envelope.tsMs
                 request = ClassifyRequest(
                     sessionID: sessionID,
@@ -200,21 +211,26 @@ public struct SessionStore: Sendable {
 
     public var light: Light {
         if sessions.isEmpty { return .off }
-        if sessions.values.contains(where: { $0.state == .attention }) { return .red }
+        if sessions.values.contains(where: { $0.state.light == .red }) { return .red }
         if sessions.values.contains(where: { $0.state == .review }) { return .amber }
         return .green
+    }
+
+    /// Makes the red light flash.
+    public var isFailing: Bool {
+        sessions.values.contains { $0.state == .failed }
     }
 
     public func count(_ state: SessionState) -> Int {
         sessions.values.filter { $0.state == state }.count
     }
 
-    /// Red, then amber, with the longest wait first. Then all other sessions,
+    /// Failed, red, then amber, with the longest wait first. Then all other sessions,
     /// with the most recent activity first.
     public var sorted: [Session] {
         sessions.values.sorted { a, b in
             if a.state.rank != b.state.rank { return a.state.rank < b.state.rank }
-            if a.state.rank < 2 {
+            if a.state.needsYou {
                 if a.stateSinceMs != b.stateSinceMs { return a.stateSinceMs < b.stateSinceMs }
             } else if a.lastEventMs != b.lastEventMs {
                 return a.lastEventMs > b.lastEventMs

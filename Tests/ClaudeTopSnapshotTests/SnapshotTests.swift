@@ -57,6 +57,9 @@ struct SnapshotTests {
         try await Task.sleep(nanoseconds: 300_000_000)
         try save(TrafficLightView(model: model), "panel-red", scheme: .dark)
 
+        send(model, #"{"session_id":"g","hook_event_name":"StopFailure","cwd":"/x/backend","error":"server_error","last_assistant_message":"API Error: The response stopped arriving. The response above may be incomplete."}"#, at: now - 60_000, iterm: "w0t3p0:EF")
+        try save(TrafficLightView(model: model), "panel-failed", scheme: .dark)
+
         let actions = AppActions(showSettings: {}, togglePanel: {}, installHooks: {}, removeHooks: {}, quit: {})
         for scheme in [ColorScheme.light, .dark] {
             try save(SessionListView(model: model, settings: settings, actions: actions), "list", scheme: scheme)

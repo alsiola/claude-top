@@ -7,6 +7,8 @@ import UserNotifications
 final class AppModel: ObservableObject {
     @Published private(set) var sessions: [Session] = []
     @Published private(set) var light: Light = .off
+    /// One or more sessions failed with an API error. The red light flashes.
+    @Published private(set) var failing = false
     @Published private(set) var redCount = 0
     @Published private(set) var amberCount = 0
     @Published private(set) var hookStatus: HookInstaller.Status = .notInstalled
@@ -138,7 +140,8 @@ final class AppModel: ObservableObject {
         let oldLight = light
         let newLight = store.light == .off && !placeholders.isEmpty ? .green : store.light
         if newLight != light { light = newLight }
-        redCount = store.count(.attention)
+        if store.isFailing != failing { failing = store.isFailing }
+        redCount = store.count(.attention) + store.count(.failed)
         amberCount = store.count(.review)
         let events = WebhookEvent.diff(from: webhookSessions, to: store.sessions, oldLight: oldLight, newLight: newLight)
         webhookSessions = store.sessions
@@ -165,7 +168,7 @@ final class AppModel: ObservableObject {
     /// Going to a red or amber session counts as seeing it. Without this, a
     /// wrong classification would keep the light on until the next prompt.
     func open(_ session: Session) {
-        if !session.discovered, session.state == .attention || session.state == .review {
+        if !session.discovered, session.state.needsYou {
             dismiss(session.id)
         }
         focus(session)
@@ -247,7 +250,7 @@ final class AppModel: ObservableObject {
         let sound: Bool
         let notify: Bool
         switch session.state {
-        case .attention:
+        case .failed, .attention:
             sound = settings.soundOnRed
             notify = settings.notifyOnRed
         case .review:
@@ -257,12 +260,12 @@ final class AppModel: ObservableObject {
             return
         }
         if sound {
-            NSSound(named: session.state == .attention ? "Sosumi" : "Glass")?.play()
+            NSSound(named: session.state.light == .red ? "Sosumi" : "Glass")?.play()
         }
         if notify {
             Notifier.post(
                 title: session.project,
-                body: session.reason ?? (session.state == .attention ? "Needs you" : "Ready for review")
+                body: session.reason ?? SessionRow.defaultDetail(session.state)
             )
         }
     }

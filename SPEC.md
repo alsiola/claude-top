@@ -40,6 +40,7 @@ You install the app from a DMG. The app is not in the App Store.
 | Event | One hook call from Claude Code, with its JSON payload. |
 | Helper | A small command-line program inside the app bundle. Claude Code runs it for each event. |
 | Attention | The state where a session is blocked on you (red). |
+| Failed | The state where a turn stopped because of an API error (flashing red). |
 | Review | The state where a session finished and waits for your review (amber). |
 | Jev | TypeSafe's decision model on OpenRouter. It returns typed answers (probabilities), not text. |
 
@@ -54,6 +55,7 @@ You install the app from a DMG. The app is not in the App Store.
 - The panel stays above other windows. It shows on all Spaces and over full-screen apps.
 - You can drag the panel. The app remembers its position.
 - The panel does not take keyboard focus.
+- The red light flashes (0.5 seconds on, 0.5 seconds off) when one or more sessions are `failed`. The menu bar dot flashes at the same time.
 - The red light and the amber light each have a badge. The badge shows the number of sessions in that state, if more than one.
 
 ### 4.2 The session list
@@ -63,13 +65,13 @@ Click the panel or the menu bar icon to open the session list. The list is part 
 - A colored dot for the state.
 - The project name (the last part of `cwd`) and the iTerm2 tab number.
 - The iTerm2 tab title, without the status glyph and " (claude)" that Claude Code adds. Claude Code sets the title to the topic of the conversation, so the title identifies sessions that share a folder.
-- The state: Needs you (red), Review (amber), Working (green), or Idle (green).
-- The reason, for example "Permission: Bash", "Asks a question", or "Ready for review".
+- The state: Something went wrong (red), Needs you (red), Review (amber), Working (green), or Idle (green).
+- The reason, for example "Permission: Bash", "Asks a question", "Ready for review", or the API error text.
 - The time since the last event.
 
 When the list opens, the app asks iTerm2 for its live tabs (AppleScript), and it asks again every 5 seconds while the list is open. If iTerm2 does not answer, the tab number comes from `ITERM_SESSION_ID`. That number is the position when the shell started, so it can be wrong after tabs move or close.
 
-Sort order: red sessions first, then amber, then all other sessions. In the red group and the amber group, the session that waited longest is at the top. In the other group, the most recent activity is at the top.
+Sort order: failed sessions first, then the other red sessions, then amber, then all other sessions. In the red group and the amber group, the session that waited longest is at the top. In the other group, the most recent activity is at the top.
 
 Row actions:
 
@@ -87,6 +89,8 @@ These are off by default. You can set each one for red, for amber, or for both:
 
 - Play a sound when a session goes to that state.
 - Send a macOS notification when a session goes to that state.
+
+The red settings also apply to `failed`.
 
 A webhook can also get each change. See the README, section "Webhook".
 
@@ -176,7 +180,7 @@ The helper must not write to stdout, because Claude Code parses stdout as hook o
 | `PermissionRequest` | (none) | Claude waits for approval. Set to `attention`. |
 | `Notification` | (none) | Some types need you. See section 8. |
 | `Stop` | (none) | Claude finished its turn. Classify with Jev. |
-| `StopFailure` | (none) | The turn ended with an API error. Set to `attention`. |
+| `StopFailure` | (none) | The turn ended with an API error. Set to `failed`. |
 
 The app does not register `SubagentStop`. That event ends a subagent, not the main turn.
 
@@ -224,6 +228,7 @@ The installer adds one entry like this for each event in section 7.1:
 | `idle` | green | Claude stopped and does not need you. |
 | `review` | amber | Claude finished and its work is ready for your review. |
 | `attention` | red | Claude is blocked on you. |
+| `failed` | flashing red | The turn stopped because of an API error. Claude cannot continue until you fix the cause or send a new prompt. |
 
 The app keeps one record for each `session_id`:
 
@@ -244,8 +249,9 @@ session_id, cwd, state, reason, last_event_ts_ms, context, stop_classification
 | `Notification` | `notification_type` is `elicitation_dialog`, `elicitation_url_dialog`, or `agent_needs_input` | `attention` | "Needs input" |
 | `Notification` | `notification_type` is `idle_prompt` | no change | — |
 | `Notification` | all other types | no change | — |
-| `Stop` | main agent only (no `agent_id`) | Result of the classifier (section 10) | From the classifier |
-| `StopFailure` | (any) | `attention` | "Turn failed with an error" |
+| `Stop` | main agent only, and `last_assistant_message` starts with an API error text | `failed` | The first line of the message |
+| `Stop` | main agent only (no `agent_id`), all other messages | Result of the classifier (section 10) | From the classifier |
+| `StopFailure` | (any) | `failed` | The API error text (see below) |
 | `SessionEnd` | (any) | Remove the session | — |
 | Dismiss (user action) | (any) | `idle` | — |
 
@@ -254,6 +260,8 @@ Notes:
 - Fixed rules handle all events except `Stop`. The app does not call Jev for them.
 - Subagents run in parallel with the main agent. Background subagents can run after the main agent stops. Thus tool events from a subagent (with `agent_id`) do not change the state. A `PermissionRequest` or a `Notification` from a subagent still sets `attention`.
 - `idle_prompt` comes when you did not reply for some time. It does not change the state. The `Stop` classification already set the correct color.
+- API error texts are messages that Claude Code writes itself. They start with "API Error:", "Not logged in", "Login expired", "You've hit your", "Credit balance is too low", or "Claude AI usage limit reached". Some errors can end the turn with `Stop` and not `StopFailure`, so the app also checks `Stop` messages. It does not call Jev for them.
+- For `StopFailure`, the reason is the first line of `last_assistant_message` if it is an API error text. Else it is the first line of `error_details`. Else it is a short text for the `error` type, for example "Billing problem: no credits" for `billing_error`.
 - If you press Esc at a permission prompt, Claude Code can stop without a `Stop` event. The session then stays red until you send a prompt or click Dismiss.
 
 ### 8.3 Order of events
@@ -287,7 +295,7 @@ Thus the app also:
 
 The most urgent session sets the light:
 
-1. Red if one or more sessions are `attention`.
+1. Red if one or more sessions are `attention` or `failed`. The red light flashes if one or more sessions are `failed`.
 2. Else amber if one or more sessions are `review`.
 3. Else green if there are sessions.
 4. Else all lights are dim.
